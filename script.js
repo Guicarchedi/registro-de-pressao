@@ -1,6 +1,7 @@
 // Global State
-let healthRecords = JSON.parse(localStorage.getItem('granny_pro_v1')) || [];
+let healthRecords = [];
 let chart = null;
+let currentPatientId = localStorage.getItem('patientId') || 'avo-maria';
 
 // Load custom settings or use defaults
 let settings = JSON.parse(localStorage.getItem('granny_settings')) || {
@@ -10,6 +11,29 @@ let settings = JSON.parse(localStorage.getItem('granny_settings')) || {
 
 // Initialize Lucide Icons
 lucide.createIcons();
+
+/**
+ * Load records from Firestore
+ */
+async function loadRecordsFromFirestore() {
+    try {
+        const q = query(collection(window.db, 'patients', currentPatientId, 'records'), orderBy('timestamp', 'desc'));
+        const querySnapshot = await getDocs(q);
+        healthRecords = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            healthRecords.push({
+                id: doc.id,
+                ...data,
+                timestamp: new Date(data.timestamp.seconds * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            });
+        });
+    } catch (error) {
+        console.error('Erro ao carregar registros:', error);
+        // Fallback to localStorage if Firestore fails
+        healthRecords = JSON.parse(localStorage.getItem('granny_pro_v1')) || [];
+    }
+}
 
 /**
  * Records new pressure data
@@ -51,7 +75,20 @@ function recordData() {
 
 
     healthRecords.unshift(newRecord);
-    localStorage.setItem('granny_pro_v1', JSON.stringify(healthRecords));
+    // Save to Firestore
+    try {
+        await addDoc(collection(window.db, 'patients', currentPatientId, 'records'), {
+            sys: newRecord.sys,
+            dia: newRecord.dia,
+            status: newRecord.status,
+            advice: newRecord.advice,
+            timestamp: new Date()
+        });
+    } catch (error) {
+        console.error('Erro ao salvar no Firestore:', error);
+        // Fallback to localStorage
+        localStorage.setItem('granny_pro_v1', JSON.stringify(healthRecords));
+    }
     
     input.value = '';
     updateUI();
@@ -115,7 +152,6 @@ function updateUI() {
         const status = classifyPressure(r.sys, r.dia);
         return { ...r, status, advice: status.advice };
     });
-    localStorage.setItem('granny_pro_v1', JSON.stringify(healthRecords));
 
     renderHistory();
     renderChart();
@@ -123,6 +159,23 @@ function updateUI() {
     lucide.createIcons();
 
     // no entry feedback element to clear anymore
+}
+
+/**
+ * Delete a specific record
+ */
+async function deleteRecord(id) {
+    if (!confirm('Tem certeza que deseja apagar este registro?')) return;
+    try {
+        await deleteDoc(doc(window.db, 'patients', currentPatientId, 'records', id));
+        healthRecords = healthRecords.filter(record => record.id !== id);
+    } catch (error) {
+        console.error('Erro ao deletar do Firestore:', error);
+        // Fallback
+        healthRecords = healthRecords.filter(record => record.id !== id);
+        localStorage.setItem('granny_pro_v1', JSON.stringify(healthRecords));
+    }
+    updateUI();
 }
 
 function renderHistory() {
@@ -139,8 +192,11 @@ function renderHistory() {
                 <p class="text-lg font-mono font-bold">${item.sys}/${item.dia}</p>
                 ${item.advice ? `<p class="text-xs opacity-70 mt-1">${item.advice}</p>` : ''}
             </div>
-            <div class="flex items-center">
+            <div class="flex items-center gap-2">
                 <span class="text-[10px] font-black px-2 py-1 rounded border border-current">${item.status.label}</span>
+                <button onclick="deleteRecord(${item.id})" class="text-red-500 hover:text-red-700 p-1" title="Apagar registro">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
             </div>
         </div>
     `).join('');
@@ -190,10 +246,19 @@ pressureInput.addEventListener('keydown', function(e) {
 /**
  * Remove all saved records after confirmation
  */
-function clearHistory() {
+async function clearHistory() {
     if (!confirm('Tem certeza que deseja limpar todo o histórico?')) return;
-    healthRecords = [];
-    localStorage.removeItem('granny_pro_v1');
+    try {
+        const querySnapshot = await getDocs(collection(window.db, 'patients', currentPatientId, 'records'));
+        querySnapshot.forEach(async (docSnap) => {
+            await deleteDoc(doc(window.db, 'patients', currentPatientId, 'records', docSnap.id));
+        });
+        healthRecords = [];
+    } catch (error) {
+        console.error('Erro ao limpar do Firestore:', error);
+        healthRecords = [];
+        localStorage.removeItem('granny_pro_v1');
+    }
     updateUI();
 }
 
@@ -201,8 +266,14 @@ function clearHistory() {
  * Save custom settings
  */
 function saveSettings() {
+    const patientIdInput = document.getElementById('patientId').value.trim();
     const highInput = document.getElementById('highThreshold').value.trim();
     const lowInput = document.getElementById('lowThreshold').value.trim();
+
+    if (!patientIdInput) {
+        alert('Digite um ID do Paciente/Família.');
+        return;
+    }
 
     if (!highInput.includes('/') || !lowInput.includes('/')) {
         alert('Use o formato: 12/8 para os limites.');
@@ -217,6 +288,9 @@ function saveSettings() {
         return;
     }
 
+    currentPatientId = patientIdInput;
+    localStorage.setItem('patientId', currentPatientId);
+
     settings = {
         highThreshold: { sys: highSys, dia: highDia },
         lowThreshold: { sys: lowSys, dia: lowDia }
@@ -224,16 +298,17 @@ function saveSettings() {
 
     localStorage.setItem('granny_settings', JSON.stringify(settings));
     alert('Configurações salvas! O histórico será reclassificado.');
-    updateUI();
+    loadRecordsFromFirestore().then(() => updateUI());
 }
 
 /**
  * Load settings into UI fields
  */
 function loadSettingsToUI() {
+    document.getElementById('patientId').value = currentPatientId;
     document.getElementById('highThreshold').value = `${settings.highThreshold.sys}/${settings.highThreshold.dia}`;
     document.getElementById('lowThreshold').value = `${settings.lowThreshold.sys}/${settings.lowThreshold.dia}`;
 }
 
 // Initial Load
-updateUI();
+loadRecordsFromFirestore().then(() => updateUI());
