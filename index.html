@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Pressão</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  
+    <nav class="navbar bg-white shadow-sm">
+        <div class="container mx-auto px-4">
+            <h1 class="logo flex items-center gap-2 text-xl sm:text-2xl">
+                <i data-lucide="heart-pulse"></i> Gerenciador de Pressão PRO
+            </h1>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 main-content">
+        <section class="card">
+            <h2 class="section-title">Configurações</h2>
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Pressão alta acima de:</label>
+                    <input type="text" id="highThreshold" placeholder="Ex: 14/9" class="main-input w-full" value="14/9">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Pressão baixa abaixo de:</label>
+                    <input type="text" id="lowThreshold" placeholder="Ex: 9/5" class="main-input w-full" value="9/5">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="saveSettings()" class="btn-primary w-full">
+                        <i data-lucide="settings"></i> Salvar Config
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="section-title">Nova Entrada</h2>
+            <div class="input-group flex flex-col sm:flex-row">
+                <input type="text" id="pressureInput" placeholder="Ex: 12/8" aria-label="Medida de pressão" class="main-input w-full sm:flex-1">
+                <button onclick="recordData()" class="btn-primary w-full sm:w-auto mt-2 sm:mt-0">
+                    <i data-lucide="save"></i> Salvar
+                </button>
+            </div>
+        </section>
+
+        <div class="grid gap-6 sm:grid-cols-2">
+            <section class="card chart-container">
+                <h2 class="section-title text-center">Gráfico de tendência</h2>
+                <p class="text-xs text-center text-gray-500 mb-2">mostrando os últimos 7 registros</p>
+                <canvas id="healthChart" height="200"></canvas>
+            </section>
+
+            <section class="card history-container">
+                <div class="flex justify-between items-center">
+                    <h2 class="section-title">Histórico</h2>
+                    <button id="clearBtn" class="text-sm text-red-500 hover:underline" onclick="clearHistory()">Limpar</button>
+                </div>
+                <div id="historyLog" class="history-list mt-2"></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
